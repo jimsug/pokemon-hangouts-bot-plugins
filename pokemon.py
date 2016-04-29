@@ -60,6 +60,7 @@ def pokedex(bot, event, pokemon):
   if cache:
     logger.info("Found {} in cache".format(pokemon.lower()))
     data = cache
+    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> [#{}]".format(pokemon.lower(),pokemon.capitalize(),data["id"])
   else:
     logger.info("{} not found in cache OR cache expired, getting from pokeapi".format(pokemon.capitalize()))
     logger.info(cache)
@@ -70,8 +71,8 @@ def pokedex(bot, event, pokemon):
       return
 
     cachepkmn(bot, data, pokemon.lower())
+    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),pokemon.capitalize(),data["id"])
 
-  pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),pokemon.capitalize(),data["id"])
   pkmn = pkmn + "<br>Type: <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][0]["type"]["name"],data['types'][0]["type"]["name"].capitalize())
   if len(data['types']) > 1 :
     pkmn = pkmn + " / <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][1]["type"]["name"],data['types'][1]["type"]["name"].capitalize())
