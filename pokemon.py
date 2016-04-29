@@ -72,8 +72,9 @@ def pokedex(bot, event, pokemon):
     cachepkmn(bot, data, pokemon.lower())
 
   pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),pokemon.capitalize(),data["id"])
-  for type in data["types"]:
-    pkmn = pkmn + "<br>Type: <a href='http://pokemondb.net/type/{}'>{}</a>".format(type["type"]["name"],type["type"]["name"].capitalize())
+  pkmn = pkmn + "<br>Type: <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][0]["type"]["name"],data['types'][0]["type"]["name"].capitalize())
+  if len(data['types']) > 1 :
+    pkmn = pkmn + " / <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][1]["type"]["name"],data['types'][1]["type"]["name"].capitalize())
 
   link_image = "http://img.pokemondb.net/artwork/{}.jpg".format(pokemon.lower())
 
