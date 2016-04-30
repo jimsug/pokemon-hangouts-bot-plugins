@@ -124,8 +124,8 @@ def pokedex(bot, event, pokemon):
     logger.info("{} not found in cache OR cache expired, getting from pokeapi".format(pokemon.capitalize()))
     try:
       data = json.loads(urllib.request.urlopen(request).read().decode("utf-8"))
-    except:
-      yield from bot.coro_send_message(event.conv, "{}: Pokemon not found".format(event.user.full_name))
+    except urllib.error.URLError as e:
+      yield from bot.coro_send_message(event.conv, "{}: Error: {}".format(event.user.full_name, json.loads(e.read().decode("utf8","ignore"))['detail']))
       return
 
     cachepkmn(bot, data, pokemon.lower())
