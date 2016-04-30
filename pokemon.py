@@ -148,7 +148,10 @@ def pokedex(bot, event, pokemon):
       if len(matchups[x]) > 0:
         matches = matches + "<br><b>{}</b>: ".format(x.capitalize())
         for y in matchups[x]:
-          matches = matches + " <a href='http://pokemondb.net/type/{}'>{}</a>".format(y.lower(),y.capitalize())
+          if isinstance(y, dict):
+            matches = matches + " <a href='http://pokemondb.net/type/{}'>{}</a>".format(y['name'].lower(),y['name'].capitalize())
+          else: 
+            matches = matches + " <a href='http://pokemondb.net/type/{}'>{}</a>".format(y.lower(),y.capitalize())
   else:
     matches = "<i>Type matchups not currently available. Sorry :(</i>"
 
