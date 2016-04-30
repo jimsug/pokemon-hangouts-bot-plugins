@@ -15,11 +15,58 @@ def _initialise(bot):
   plugins.register_admin_command(["clearpokedex"])
   plugins.register_user_command(["pokedex"])
 
+def comparetypes(data1, data2):
+  weak1 = [x['name'] for x in data1['damage_relations']['double_damage_from']]
+  weak2 = [x['name'] for x in data2['damage_relations']['double_damage_from']]
+  resist1 = [x['name'] for x in data1['damage_relations']['half_damage_from']]
+  resist2 = [x['name'] for x in data2['damage_relations']['half_damage_from']]
+  immune1 = [x['name'] for x in data1['damage_relations']['no_damage_from']]
+  immune2 = [x['name'] for x in data2['damage_relations']['no_damage_from']]
+  immune = set(immune1).union(immune2)
+  four = set(weak1).intersection(weak2).difference(immune)
+  quarter = set(resist1).intersection(resist2).difference(immune)
+  two = set(weak1).symmetric_difference(weak2).difference(set(resist1).symmetric_difference(resist2)).difference(immune)
+  half = ((set(resist1).symmetric_difference(resist2)).difference(set(weak1).symmetric_difference(weak2))).difference(immune)
+  matchup = {'4x':four,'2x':two,'1/2':half,'1/4':quarter,'immune':immune}
+  return matchup
+  
 @asyncio.coroutine
 def clearpokedex(bot, event):
   '''Clear the cached pokedex - useful when the data seems outdated.'''
   bot.memory.set_by_path(["pokedex"], {})
   yield from bot.coro_send_message(event.conv, "Pokedex cache cleared")
+
+def gettypefromcache(bot, pkmntype):
+  if not bot.memory.exists(["pokedex", "pokemontypes"]):
+    bot.memory.set_by_path(["pokedex", "pokemontypes"], {})
+    return None
+  else:
+    if not bot.memory.exists(["pokedex", "pokemontypes", pkmntype]):
+      return None
+    elif bot.get_by_path(["pokedex", "pokemontypes", pkmntype, "expires"]) < str(datetime.datetime.now()):
+      logger.info("Cached data for {} type expired.".format(pkmntype))
+      return None
+    else:
+      return bot.get_by_path(["pokedex","pokemontypes",pkmntype])
+
+@asyncio.coroutine
+def cachepkmntype(bot, pkmntypedata):
+  if not bot.memory.exists(["pokedex", "pokemontypes"]):
+    bot.memory.set_by_path(["pokedex", "pokemontypes"], {})
+  
+  bot.memory.set_by_path(["pokedex", "pokemontypes", pkmntypedata["name"]], {"name":pkmntypedata["name"],"damage_relations":pkmntypedata['damage_relations'],'expires':str(datetime.datetime.now() + datetime.timedelta(days=5))})
+  logger.info("Writing {} type data into cache".format(pkmntypedata['name']))
+
+def getpkmntype(bot, pkmntype):
+  url = "http://pokeapi.co/api/v2/type/{}".format(pkmntype.lower())
+  request = urllib.request.Request(url, headers = {"User-agent":"Mozilla/5.0"})
+  try:
+    data = json.loads(urllib.request.urlopen(request).read().decode("utf-8"))
+  except:
+    return None
+  
+  return data
+
 
 def getfromcache(bot, pokemonname):
   if not bot.memory.exists(["pokedex"]):
@@ -49,9 +96,21 @@ def cachepkmn(bot, pkmndata, name):
   logger.info("Writing {} into cache".format(name))
   return
 
+def gettype(bot, pkmntype, logger):
+  cache = gettypefromcache(bot, pkmntype)
+  if cache:
+    return cache
+  else:
+    typedata = getpkmntype(bot, pkmntype)
+    if typedata:
+      cachepkmntype(bot, typedata)
+
+    return typedata
+  return
+
 @asyncio.coroutine
 def pokedex(bot, event, pokemon):
-  '''Returns the number and types of a pokemon'''
+  '''Returns the number, types, weaknesses and image of a pokemon'''
   if pokemon.isdigit(): return
   url = "http://pokeapi.co/api/v2/pokemon/{}/".format(pokemon.lower())
   request = urllib.request.Request(url, headers = {"User-agent":"Mozilla/5.0"})
@@ -63,7 +122,6 @@ def pokedex(bot, event, pokemon):
     pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> [#{}]".format(pokemon.lower(),pokemon.capitalize(),data["id"])
   else:
     logger.info("{} not found in cache OR cache expired, getting from pokeapi".format(pokemon.capitalize()))
-    logger.info(cache)
     try:
       data = json.loads(urllib.request.urlopen(request).read().decode("utf-8"))
     except:
@@ -73,12 +131,29 @@ def pokedex(bot, event, pokemon):
     cachepkmn(bot, data, pokemon.lower())
     pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),pokemon.capitalize(),data["id"])
 
-  pkmn = pkmn + "<br>Type: <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][0]["type"]["name"],data['types'][0]["type"]["name"].capitalize())
+  type1 = gettype(bot, data['types'][0]['type']['name'], logger)
+  pkmn = pkmn + "<br><b>Type</b>: <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][0]["type"]["name"],data['types'][0]["type"]["name"].capitalize())
   if len(data['types']) > 1 :
+    type2 = gettype(bot, data['types'][1]['type']['name'], logger)
     pkmn = pkmn + " / <a href='http://pokemondb.net/type/{}'>{}</a>".format(data['types'][1]["type"]["name"],data['types'][1]["type"]["name"].capitalize())
+    if type1 and type2:
+      matchups = comparetypes(type1, type2)
+  else:
+    if type1:
+      matchups = {'2x':type1['damage_relations']['double_damage_from'],'1/2':type1['damage_relations']['half_damage_from'],'immune':type1['damage_relations']['no_damage_from']}
+  matches = ""
+  
+  if matchups:
+    for x in matchups:
+      if len(matchups[x]) > 0:
+        matches = matches + "<br><b>{}</b>: ".format(x.capitalize())
+        for y in matchups[x]:
+          matches = matches + " <a href='http://pokemondb.net/type/{}'>{}</a>".format(y.lower(),y.capitalize())
+  else:
+    matches = "<i>Type matchups not currently available. Sorry :(</i>"
 
+  pkmn = pkmn + matches
   link_image = "http://img.pokemondb.net/artwork/{}.jpg".format(pokemon.lower())
-
   filename = os.path.basename(link_image)
   r = yield from aiohttp.request('get', link_image)
   raw = yield from r.read()
