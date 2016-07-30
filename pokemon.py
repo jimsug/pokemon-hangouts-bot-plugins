@@ -2,7 +2,7 @@
 pokemon.py -- a hangoutsbot plugin for retrieving information about pokemon, given a name
 This uses the pokeapi.co API to retrieve the information.
 
-Because Pokéapi limits requests to 300 requests per method, we store cached data for each Pokémon for 5 days - this should be sufficient for up to 1500 Pokémon overall. Currently there are approximately 811 Pokémon accessible through the Pokéapi so this should be more than enough.
+Because Pokéapi limits requests to 300 requests per resource, we store cached data for each Pokémon for 5 days - this should be sufficient for up to 1500 Pokémon overall. Currently there are approximately 811 Pokémon accessible through the Pokéapi so this should be more than enough. Of course, the API limit is per resource so theoretically no caching is required, but let's be API-friendly.
 '''
 import hangups, plugins, asyncio, logging, datetime
 import urllib.request
@@ -15,7 +15,8 @@ pokedex_config = {}
 
 def _initialise(bot):
   plugins.register_admin_command(["clearpokedex"])
-  plugins.register_user_command(["pokedex"])
+  plugins.register_user_command(["pokedex", "pokemon"])
+
   global pokedex_config
   try:
     pokedex_config = bot.get_config_option('pokedex')
@@ -201,3 +202,75 @@ def pokedex(bot, event, pokemon):
   image_data = io.BytesIO(raw)
   image_id = yield from bot._client.upload_image(image_data, filename=filename)
   yield from bot.coro_send_message(event.conv, pkmn, image_id=image_id)
+
+def formatNature(data):
+  rtndata = ["<b><u>{}</u></b>".format(data['name'].title())]
+  try:
+    rtndata.append("<b>10%+</b> {}".format(data['increased_stat']['name']).title())
+  except TypeError:
+    rtndata.append("<i>{} does not increase any stat.</i>".format(data['name'].title()))
+  try:
+    rtndata.append("<b>10%-</b> {}".format(data['decreased_stat']['name']).title())
+  except TypeError:
+    rtndata.append("<i>{} does not decrease any stat.</i>".format(data['name'].title()))
+
+  return "<br>".join(rtndata)
+
+@asyncio.coroutine
+def cacheNature(bot, data):
+  try:
+    if not bot.memory.exists(["_pokemondata"]):
+      bot.memory.set_by_path(["_pokemondata"], {"natures":{}})
+  except:
+    bot.memory.set_by_path(["_pokemondata"], {"natures":{}})
+  try:
+    if not bot.memory.exists(["_pokemondata", "natures"]):
+      bot.memory.set_by_path(["_pokemondata", "natures"], {})
+  except:
+    bot.memory.set_by_path(["_pokemondata", "natures"], {})
+  
+  bot.memory.set_by_path(["_pokemondata", "natures", data["name"]], {"name":data["name"], "increased_stat":data["increased_stat"], "decreased_stat":data["decreased_stat"], "expires": str(datetime.datetime.now() + datetime.timedelta(days=5))})
+  return
+
+def getNatureFromCache(bot, nature):
+  try:
+    if bot.memory.exists(["_pokemondata", "natures", nature]):
+      if bot.memory.get_by_path(["_pokemondata", "natures", nature, "expires"]) < str(datetime.datetime.now()):
+        return False
+      else:
+        return bot.memory.get_by_path(["_pokemondata", "natures", nature])
+    else:
+      return False
+  except:
+    return False
+
+  return False
+
+@asyncio.coroutine
+def getNature(bot, event, *args):
+  nature = " ".join(args)
+  try:
+    data = getNatureFromCache(bot, nature)
+  except KeyError:
+    data = False
+    
+  if not data:
+    url = "http://pokeapi.co/api/v2/nature/{}/".format(nature.lower())
+    request = urllib.request.Request(url, headers = {"User-agent":"Mozilla/5.0"})
+    try:
+      data = json.loads(urllib.request.urlopen(request).read().decode("utf-8"))
+    except urllib.error.URLError as e:
+      yield from bot.coro_send_message(event.conv, "{}: Error: {}".format(event.user.full_name, json.loads(e.read().decode("utf8","ignore"))['detail']))
+      return
+
+    yield from cacheNature(bot, data)
+
+  msg = formatNature(data)
+  yield from bot.coro_send_message(event.conv, msg)
+
+def pokemon(bot, event, command, *args):
+  '''A placeholder command for future functions.'''
+  if command == 'nature':
+    yield from getNature(bot, event, *args)
+
+  return
