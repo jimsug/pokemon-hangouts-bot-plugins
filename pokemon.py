@@ -19,7 +19,7 @@ def _initialise(bot):
 
   global pokedex_config
   try:
-    pokedex_config = bot.get_config_option('pokedex')
+    pokedex_config = bot.get_config_option('pokedex') or {}
   except:
     logger.error('Unable to load pokedex configuration - default configuration will apply.')
   
