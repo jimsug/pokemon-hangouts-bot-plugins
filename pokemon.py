@@ -19,7 +19,7 @@ def _initialise(bot):
 
   global pokedex_config
   try:
-    pokedex_config = bot.get_config_option('pokedex')
+    pokedex_config = bot.get_config_option('pokedex') or {}
   except:
     logger.error('Unable to load pokedex configuration - default configuration will apply.')
   
@@ -114,7 +114,7 @@ def cachepkmn(bot, pkmndata, name):
   if not bot.memory.exists(["pokedex"]):
     bot.memory.set_by_path(["pokedex"], {})
   
-  bot.memory.set_by_path(["pokedex", name], {"id":pkmndata["id"],"types":pkmndata["types"],"abilities":pkmndata['abilities'], "expires": str(datetime.datetime.now() + datetime.timedelta(days=5))})
+  bot.memory.set_by_path(["pokedex", name], {"id":pkmndata["id"],"name":pkmndata["name"],"types":pkmndata["types"],"abilities":pkmndata['abilities'],"expires": str(datetime.datetime.now() + datetime.timedelta(days=5))})
   logger.info("Writing {} into cache".format(name))
   return
 
@@ -132,6 +132,7 @@ def gettype(bot, pkmntype, logger):
 
 @asyncio.coroutine
 def pokedex(bot, event, pokemon):
+  pokemon = pokemon.strip('#')
   '''Returns the number, types, weaknesses and image of a pokemon'''
   if pokedex_config:
     check_config(bot, pokedex_config)    
@@ -141,7 +142,6 @@ def pokedex(bot, event, pokemon):
   except KeyError:
     pokedex_config['info'] = ['types']
 
-  if pokemon.isdigit(): return
   url = "http://pokeapi.co/api/v2/pokemon/{}/".format(pokemon.lower())
   request = urllib.request.Request(url, headers = {"User-agent":"Mozilla/5.0"})
   cache = getfromcache(bot, pokemon.lower())
@@ -149,7 +149,7 @@ def pokedex(bot, event, pokemon):
   if cache:
     logger.info("Found {} in cache".format(pokemon.lower()))
     data = cache
-    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> [#{}]".format(pokemon.lower(),pokemon.capitalize(),data["id"])
+    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> [#{}]".format(pokemon.lower(),data['name'].capitalize(),data["id"])
   else:
     logger.info("{} not found in cache OR cache expired, getting from pokeapi".format(pokemon.capitalize()))
     try:
@@ -159,7 +159,7 @@ def pokedex(bot, event, pokemon):
       return
 
     cachepkmn(bot, data, pokemon.lower())
-    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),pokemon.capitalize(),data["id"])
+    pkmn = "<b><a href='http://pokemondb.net/pokedex/{}'>{}</a></b> (#{})".format(pokemon.lower(),data['name'].capitalize(),data["id"])
   
   if 'types' in pokedex_config['info']:
     type1 = gettype(bot, data['types'][0]['type']['name'], logger)
@@ -195,7 +195,7 @@ def pokedex(bot, event, pokemon):
 
     pkmn = "<br>".join([pkmn, "<br>".join(abilities)])
 
-  link_image = "http://img.pokemondb.net/artwork/{}.jpg".format(pokemon.lower())
+  link_image = "http://img.pokemondb.net/artwork/{}.jpg".format(data['name'])
   filename = os.path.basename(link_image)
   r = yield from aiohttp.request('get', link_image)
   raw = yield from r.read()
